@@ -30,6 +30,9 @@ import fontable
 # Inter-client communication conventions
 import icccm
 
+def Property(obj):
+	return property(doc=obj.__doc__, **obj())
+
 class Drawable(resource.Resource):
     __drawable__ = resource.Resource.__resource__
 
@@ -419,7 +422,22 @@ class Window(Drawable):
     def query_tree(self):
         return request.QueryTree(display = self.display,
                                  window = self.id)
+    @Property
+    def children(self):
+	"""A list containing all of the windows' children"""
+	def fget(self):
+            (root, parent, children) = request.QueryTree(display = self.display, window = self.id)
+	    return list(children)
+	return locals()
 
+    @Property
+    def parent(self):
+        def fget(self):
+            (root, parent, children) = request.QueryTree(display = self.display, window = self.id)
+	    return parent
+	def fset(self, parent):
+	    request.ReparentWindow(window=self.id, parent=parent.id, x=0, y=0)
+	return locals()
 
     def change_property(self, property, type, format, data,
                         mode = X.PropModeReplace, onerror = None):
