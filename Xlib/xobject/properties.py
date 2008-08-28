@@ -12,77 +12,104 @@ from Xlib import X, Xatom, protocol
 from Xlib.xobject import drawable
 import types
 
-datatype_sizes = {
-    'ATOM': 32,
-    'CARDINAL': 32,
-    'STRING': 8,
-    'UTF8_STRING': 8,
-    'WINDOW': 32,
-    Atom: 32,
-    int: 32,
-    string: 8,
-    unicode: 8,
-    Window: 32,
-}
+#datatype_sizes = {
+#    'ATOM': 32,
+#    'CARDINAL': 32,
+#    'STRING': 8,
+#    'UTF8_STRING': 8,
+#    'WINDOW': 32,
+#    XAtom: 32,
+#    int: 32,
+#    string: 8,
+#    unicode: 8,
+#    Window: 32,
+#}
+#
+#class prop_definition(object):
+#    def __init__(self, type, aggregate_type='single', aggregate_size_multiple=1):
+#        self.type = type
+#        self.aggregate_type = aggregate_type
+#        self.aggregate_size_multiple = aggregate_size_multiple
+#
+#    @property
+#    def format(self):
+#        return datatype_sizes[self.type]
+#
+#    def validate(self, agg):
+#        if self.aggregate_type != 'array':
+#            self.validate_single_element(agg)
+#            return
+#        iter(agg)
+#        assert len(agg) % self.aggregate_size_multiple == 0
+#        for x in agg:
+#            self.validate_single_element(x)
+#
+#    def validate_single_element(self, val):
+#        # unicode stuff is still seriously retarded
+#        if self.type == 'UTF8_STRING':
+#            assert val == unicode(val)
+#        elif self.type == 'STRING':
+#            assert val == str(val)
+#        elif self.type in ('ATOM', 'CARDINAL', 'WINDOW'):
+#            assert (
+#                isinstance(val, types.LongType) or isinstance(val, types.IntType)
+#                or (self.type == 'WINDOW' and isinstance(val, drawable.Window))
+#            )
+#
+#    def convert(self, val):
+#        if self.aggregate_type == 'array':
+#            return [ self.convert_single_element(v) for v in val ]
+#        elif self.aggregate_type == 'nullarray':
+#            return [ self.convert_single_element(v) + '\0' for v in val ]
+#        elif self.format == 32:
+#            return [ self.convert_single_element(val) ]
+#        return self.convert_single_element(val)
+#
+#    def convert_single_element(self, val):
+#        # doing change_prop(..., [ w.id for w in windows ]) gets real old, so
+#        # whereas python-xlib only takes numerical window ids for a WINDOW
+#        # property, we allow window objects to be passed in and we use the id
+#        # property of the objects automatically
+#        if self.type == 'WINDOW' and isinstance(val, drawable.Window):
+#            return val.id
+#        return val
 
-class prop_definition(object):
-    def __init__(self, type, aggregate_type='single', aggregate_size_multiple=1):
-        self.type = type
-        self.aggregate_type = aggregate_type
-        self.aggregate_size_multiple = aggregate_size_multiple
-
-    @property
-    def format(self):
-        return datatype_sizes[self.type]
-
-    def validate(self, agg):
-        if self.aggregate_type != 'array':
-            self.validate_single_element(agg)
-            return
-        iter(agg)
-        assert len(agg) % self.aggregate_size_multiple == 0
-        for x in agg:
-            self.validate_single_element(x)
-
-    def validate_single_element(self, val):
-        # unicode stuff is still seriously retarded
-        if self.type == 'UTF8_STRING':
-            assert val == unicode(val)
-        elif self.type == 'STRING':
-            assert val == str(val)
-        elif self.type in ('ATOM', 'CARDINAL', 'WINDOW'):
-            assert (
-                isinstance(val, types.LongType) or isinstance(val, types.IntType)
-                or (self.type == 'WINDOW' and isinstance(val, drawable.Window))
-            )
-
-    def convert(self, val):
-        if self.aggregate_type == 'array':
-            return [ self.convert_single_element(v) for v in val ]
-        elif self.aggregate_type == 'nullarray':
-            return [ self.convert_single_element(v) + '\0' for v in val ]
-        elif self.format == 32:
-            return [ self.convert_single_element(val) ]
-        return self.convert_single_element(val)
-
-    def convert_single_element(self, val):
-        # doing change_prop(..., [ w.id for w in windows ]) gets real old, so
-        # whereas python-xlib only takes numerical window ids for a WINDOW
-        # property, we allow window objects to be passed in and we use the id
-        # property of the objects automatically
-        if self.type == 'WINDOW' and isinstance(val, drawable.Window):
-            return val.id
-        return val
-
-class Atom:
-	def __init__(self, screen, data):
+class XAtom:
+	def __init__(self, display, name = ''):
 		self.screen = screen
-		self.data = data
-		#screen.
+		if name:
+			self.atom = display.intern_atom(name)
+		self.display = display
+	@staticmethod
+	def from_card(card):
+		value = XAtom(display)
+		value.atom = card
+		return value
 	def __str__(self):
-		return data
-	def atom(self):
+		return self.display.get_atom_name(self.atom)
+	def __int__(self):
 		return self.atom
+
+def get_text_property(window, display, property_name):
+	property = XAtom(display, property_name)
+        r = request.GetProperty(display = display,
+                                delete = False,
+                                window = window,
+                                property = int(property),
+                                type = 0,
+                                long_offset = 0,
+                                long_length = 1000000)
+# TODO: property_type is actually an atom, need to contend with that...
+	UTF8_STRING = XAtom(display, "UTF8_STRING")
+	if r.property_type == Xatom.STRING:
+		return str(r.value)
+	elif r.property_type == Xatom.ATOM:
+		atom = XAtom.from_card(r.property_type)
+		return str(atom)
+	elif r.property_type == UTF8_STRING: # wtf? no predefined atom for UTF8_STRING?...
+		return unicode(r.value)
+	else
+		return ''
 
 _NET_WM = {
     "_NET_WM_NAME":              unicode
@@ -90,9 +117,9 @@ _NET_WM = {
     "_NET_WM_ICON_NAME":         unicode,
     "_NET_WM_VISIBLE_ICON_NAME": unicode,
 
-    "_NET_WM_WINDOW_TYPE":       [Atom],
-    "_NET_WM_STATE":             [Atom],
-    "_NET_WM_ALLOWED_ACTIONS":   [Atom],
+    "_NET_WM_WINDOW_TYPE":       [XAtom],
+    "_NET_WM_STATE":             [XAtom],
+    "_NET_WM_ALLOWED_ACTIONS":   [XAtom],
 
     "_NET_WM_DESKTOP":           int,
     "_NET_WM_PID":               int,
@@ -134,7 +161,7 @@ window_hints = {
     "WM_NAME":                   string,
     "WM_CLASS":                  [string],
     "WM_ICON_NAME":              string,
-    "WM_PROTOCOLS":              [Atom]
+    "WM_PROTOCOLS":              [XAtom]
 }
 
 class array_of:
