@@ -16,6 +16,30 @@
 #    along with this program; if not, write to the Free Software
 #    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+class XAtom:
+	def __init__(self, display, name = ''):
+		if name:
+			self.atom = display.intern_atom(name)
+		self.display = display
+
+	def __str__(self):
+		return self.display.get_atom_name(self.atom)
+
+	def __int__(self):
+		return self.atom
+	def __hash__(self):
+		return hash(self.atom)
+
+def atom(display, a):
+	if isinstance(a, XAtom):
+		return a
+	else: return XAtom(display, a)
+
+def from_int(display, card):
+	value = XAtom(display)
+	value.atom = card
+	return value
+
 PRIMARY = 1
 SECONDARY = 2
 ARC = 3

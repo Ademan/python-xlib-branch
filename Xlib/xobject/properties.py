@@ -9,8 +9,12 @@
 
 from Xlib.protocol import request, rq
 from Xlib import X, Xatom, protocol
+from Xlib.Xatom import XAtom, atom
 from Xlib.xobject import drawable
 import types
+
+
+# FIXME: USE ADAPTER PATTERN?
 
 #datatype_sizes = {
 #    'ATOM': 32,
@@ -74,21 +78,14 @@ import types
 #            return val.id
 #        return val
 
-class XAtom:
-	def __init__(self, display, name = ''):
-		self.screen = screen
-		if name:
-			self.atom = display.intern_atom(name)
-		self.display = display
-	@staticmethod
-	def from_card(card):
-		value = XAtom(display)
-		value.atom = card
-		return value
-	def __str__(self):
-		return self.display.get_atom_name(self.atom)
-	def __int__(self):
-		return self.atom
+class PropertyTypeError(TypeError):
+	def __init__(self, expected, value):
+		TypeError.__init__(self,
+			"Property is of type %s, received a value of type %s" %
+			(str(expected), str(type(value)))
+				)
+		self.expected = expected
+		self.value = value
 
 def get_text_property(window, display, property_name):
 	property = XAtom(display, property_name)
@@ -99,20 +96,49 @@ def get_text_property(window, display, property_name):
                                 type = 0,
                                 long_offset = 0,
                                 long_length = 1000000)
-# TODO: property_type is actually an atom, need to contend with that...
+	
 	UTF8_STRING = XAtom(display, "UTF8_STRING")
 	if r.property_type == Xatom.STRING:
 		return str(r.value)
 	elif r.property_type == Xatom.ATOM:
 		atom = XAtom.from_card(r.property_type)
 		return str(atom)
-	elif r.property_type == UTF8_STRING: # wtf? no predefined atom for UTF8_STRING?...
+	elif r.property_type == int(UTF8_STRING):
 		return unicode(r.value)
-	else
-		return ''
+	else:
+		raise TypeError("Property is of type %s not a text type" % str(atom(r.value)))
+
+class Property(object):
+	def __init__(self, type):
+		self.type = type
+	def validate(self, value):
+		if self.type == XAtom:
+			if type(value) in (string, unicode): return
+
+		try:
+			self.type(value)
+		except TypeError:
+			raise PropertyTypeError(self.type, value)
+
+	def convert(self, value):
+		return self.type(value)
+
+class PropertyArray(Property):
+	def __init__(self, window, property):
+		self.property = property
+		self.count = count
+	def append(self, value):
+			
+	def extend(self, value):
+		
+def array_of(type, count=0):
+	if count != 0:
+		return PropertyArray(Property(type), count)
+	else:
+		raise UnimplementedError("Multi length arrays haven't been implemented yet")
 
 _NET_WM = {
-    "_NET_WM_NAME":              unicode
+    "_NET_WM_NAME":              unicode,
     "_NET_WM_VISIBLE_NAME":      unicode,
     "_NET_WM_ICON_NAME":         unicode,
     "_NET_WM_VISIBLE_ICON_NAME": unicode,
@@ -125,35 +151,34 @@ _NET_WM = {
     "_NET_WM_PID":               int,
     "_NET_WM_USER_TIME":         int,
 
-    "_NET_DESKTOP_GEOMETRY":     prop_definition("CARDINAL", "array", 2), #
-    "_NET_WM_ICON_GEOMETRY":     prop_definition("CARDINAL", "array", 4), #  what to do
-    "_NET_FRAME_EXTENTS":        prop_definition("CARDINAL", "array", 4), # 
-    "_NET_WM_STRUT":             prop_definition("CARDINAL", "array", 4), # 
-    "_NET_WM_STRUT_PARTIAL":     prop_definition("CARDINAL", "array", 12), #
+    "_NET_DESKTOP_GEOMETRY":     array_of("CARDINAL", "array", 2), #
+    "_NET_WM_ICON_GEOMETRY":     array_of("CARDINAL", "array", 4), #  what to do
+    "_NET_FRAME_EXTENTS":        array_of("CARDINAL", "array", 4), # 
+    "_NET_WM_STRUT":             array_of("CARDINAL", "array", 4), # 
+    "_NET_WM_STRUT_PARTIAL":     array_of("CARDINAL", "array", 12), #
 
     # client and root
-    "_NET_SUPPORTING_WM_CHECK":  prop_definition("WINDOW"),
+    "_NET_SUPPORTING_WM_CHECK":  array_of("WINDOW"),
 
     # root
-    "_NET_NUMBER_OF_DESKTOPS":   prop_definition("CARDINAL"),
-    "_NET_SHOWING_DESKTOP":      prop_definition("CARDINAL"),
-    "_NET_CURRENT_DESKTOP":      prop_definition("CARDINAL"),
+    "_NET_NUMBER_OF_DESKTOPS":   array_of(int),
+    "_NET_SHOWING_DESKTOP":      array_of(int),
+    "_NET_CURRENT_DESKTOP":      array_of(int),
 
-    "_NET_ACTIVE_WINDOW":        prop_definition("WINDOW"),
+    "_NET_ACTIVE_WINDOW":        array_of("WINDOW"),
 
-    "_NET_DESKTOP_NAMES":        prop_definition("UTF8_STRING", "array"),
+    "_NET_DESKTOP_NAMES":        array_of("UTF8_STRING", "array"),
 
-    "_NET_SUPPORTED":            prop_definition("ATOM", "array"),
+    "_NET_SUPPORTED":            array_of("ATOM", "array"),
 
-    "_NET_CLIENT_LIST":          prop_definition("WINDOW", "array"),
-    "_NET_CLIENT_LIST_STACKING": prop_definition("WINDOW", "array"),
-    "_NET_VIRTUAL_ROOTS":        prop_definition("WINDOW", "array"),
+    "_NET_CLIENT_LIST":          array_of("WINDOW", "array"),
+    "_NET_CLIENT_LIST_STACKING": array_of("WINDOW", "array"),
+    "_NET_VIRTUAL_ROOTS":        array_of("WINDOW", "array"),
 
-    "_NET_DESKTOP_VIEWPORT":     prop_definition("CARDINAL", "array", 2),
-    "_NET_WORKAREA":             prop_definition("CARDINAL", "array", 4),
+    "_NET_DESKTOP_VIEWPORT":     array_of("CARDINAL", "array", 2),
+    "_NET_WORKAREA":             array_of("CARDINAL", "array", 4),
 
-    "_NET_DESKTOP_LAYOUT":       prop_definition("CARDINAL", "array", 4),
-
+    "_NET_DESKTOP_LAYOUT":       array_of("CARDINAL", "array", 4),
 }
 
 window_hints = {
@@ -163,12 +188,6 @@ window_hints = {
     "WM_ICON_NAME":              string,
     "WM_PROTOCOLS":              [XAtom]
 }
-
-class array_of:
-	def __init__(self, *contents):
-		self.contents = contents
-	def __call__(self, value):
-		return 
 
 def supported_props():
     return all_props.keys()
@@ -225,20 +244,33 @@ def get_prop(dpy, win, name):
 def delete_prop(dpy, win, name):
     win.delete_property(dpy.get_atom(name))
 
-class Properties
-    def __init__(self, window):
+class Properties(object):
+	properties = {}
+	def __init__(self, window):
 		self.window = window
-    def atom(self, name):
-        if isinstance(name, str):
-		return self.window.display.get_atom(name)
-	elif isinstance(name, rq.Card32):
-		return name
-    def __getitem__(self, name): 
-        return get_prop(self.window.display, self.window, name)
-    def __setitem__(self, name, value):
-    	change_prop(self.window.display, self.window, name, value)
-    def __delitem__(self, name):
-        request.DeleteProperty(self.window.id, self.atom(name))
-    def keys(self):
-        r = request.ListProperties(display = self.window.display, window = self.id)
-	#TODO
+		self.properties = {}
+		self.property_sources = [window.display, Properties, self.properties]
+	def _get_property_source(self, property_name, property):
+		property_source = None
+		for property_source_try in self.property_sources:
+			property_source = property_source_try
+			if not property_name in property_source_try.properties:
+				break
+	def get_property(self, property_name):
+		if property_name in self.properties:
+			return self.properties[property_name]
+		elif property_name in properties:
+			return properties[property_name]
+		else:
+			raise NameError("Property %s is not handled" % property_name)
+	def __getitem__(self, name): 
+		property = self._get_property_source(name)[name]
+	def __setitem__(self, name, value):
+		property = self._get_property_source(name)[name]
+		change_prop(self.window.display, self.window, name, value)
+	def __delitem__(self, name):
+		request.DeleteProperty(self.window, atom(name))
+	def keys(self):
+		response = request.ListProperties(display = self.window.display, window = self.window)
+		print response.value
+		return [str(value) for value in response.value]

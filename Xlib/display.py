@@ -132,7 +132,7 @@ class Display:
             screen.root = self.display.resource_classes['window'](self.display, screen.root.id)
             screen.default_colormap = self.display.resource_classes['colormap'](self.display, screen.default_colormap.id)
 
-
+        self.properties = {}
     def get_display_name(self):
         """Returns the name used to connect to the server, either
         provided when creating the Display object, or fetched from the

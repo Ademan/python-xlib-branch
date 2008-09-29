@@ -30,9 +30,6 @@ import fontable
 # Inter-client communication conventions
 import icccm
 
-def Property(obj):
-	return property(doc=obj.__doc__, **obj())
-
 class Drawable(resource.Resource):
     __drawable__ = resource.Resource.__resource__
 
@@ -318,6 +315,27 @@ class Drawable(resource.Resource):
                                      drawable = self.id,
                                      width = width,
                                      height = height)
+    def get_x(self):
+    	response = request.GetGeometry(self)
+	return int(response.x)
+    def set_x(self, value):
+# TODO
+    	#response = request.ConfigureWindow
+    x = property(get_x, set_x)
+    def get_y(self):
+    	response = request.GetGeometry(self)
+	return int(response.y)
+    def set_y(self, value):
+        pass
+        # TODO
+    y = property(get_y, set_y)
+    def get_position(self):
+        response = request.GetGeometry(self)
+        return (int(response.x), int(response.y))
+    def set_position(self):
+        pass
+    	# TODO
+    position = property(get_position, set_position)
 
 class Window(Drawable):
     __window__ = resource.Resource.__resource__
@@ -422,22 +440,20 @@ class Window(Drawable):
     def query_tree(self):
         return request.QueryTree(display = self.display,
                                  window = self.id)
-    @Property
-    def children(self):
-	"""A list containing all of the windows' children"""
-	def fget(self):
-            (root, parent, children) = request.QueryTree(display = self.display, window = self.id)
-	    return list(children)
-	return locals()
 
-    @Property
-    def parent(self):
-        def fget(self):
-            (root, parent, children) = request.QueryTree(display = self.display, window = self.id)
-	    return parent
-	def fset(self, parent):
-	    request.ReparentWindow(window=self.id, parent=parent.id, x=0, y=0)
-	return locals()
+    # Friendly properties
+    def get_children(self):
+	"""A list containing all of the windows' children"""
+        response = request.QueryTree(display = self.display, window = self.id)
+	return list(response.children)
+    children = property(get_children)
+
+    def get_parent(self):
+        response = request.QueryTree(display = self.display, window = self.id)
+	return response.parent
+    def set_parent(self, parent):
+	request.ReparentWindow(window=self.id, parent=parent.id, x=0, y=0)
+    parent = property(get_parent, set_parent)
 
     def change_property(self, property, type, format, data,
                         mode = X.PropModeReplace, onerror = None):
